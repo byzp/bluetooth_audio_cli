@@ -1,6 +1,6 @@
 # Bluetooth Audio Receiver CLI
 
-[中文介绍](https://github.com/byzp/bluetooth_audio_cli/blob/master/README_zh.md)
+[中文介绍](https://github.com/byzp/bluetooth_audio_cli/blob/main/README_zh.md)
 
 Command-line Bluetooth A2DP audio sink for **Windows and Linux**. Receive audio from multiple Bluetooth devices simultaneously — via the Windows `AudioPlaybackConnection` API on Windows, or via BlueZ (D-Bus) + PipeWire/PulseAudio on Linux.
 
