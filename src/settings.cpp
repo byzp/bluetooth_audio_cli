@@ -8,9 +8,22 @@
 namespace fs = std::filesystem;
 
 fs::path AppSettings::GetSettingsPath() {
+#ifdef _WIN32
     const char* appdata = std::getenv("APPDATA");
     fs::path base = appdata ? fs::path(appdata) : fs::current_path();
     return base / "BluetoothAudioReceiver" / "settings.json";
+#else
+    // Follow the XDG Base Directory spec: $XDG_CONFIG_HOME, else ~/.config.
+    const char* xdg = std::getenv("XDG_CONFIG_HOME");
+    fs::path base;
+    if (xdg && *xdg) {
+        base = fs::path(xdg);
+    } else {
+        const char* home = std::getenv("HOME");
+        base = home ? fs::path(home) / ".config" : fs::current_path();
+    }
+    return base / "bluetooth_audio_receiver" / "settings.json";
+#endif
 }
 
 std::string AppSettings::EscapeJson(const std::string& s) {

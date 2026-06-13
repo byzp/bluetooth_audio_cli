@@ -1,14 +1,16 @@
 @echo off
+setlocal enabledelayedexpansion
+
 echo ============================================
 echo  Bluetooth Audio Receiver CLI - Build Script
 echo ============================================
 echo.
 echo Requirements:
-echo   - Visual Studio 2019+ with C++/WinRT
+echo   - Visual Studio 2026 with C++/WinRT
 echo   - Windows SDK 10.0.19041.0+
 echo.
 
-REM Detect Visual Studio
+REM Detect Visual Studio via vswhere
 set VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe
 if exist "%VSWHERE%" (
     for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -property installationPath`) do (
@@ -27,20 +29,29 @@ if not defined VS_PATH (
 echo Using Visual Studio: %VS_PATH%
 echo.
 
-REM Configure with CMake
+REM Set up the MSVC build environment from the detected VS path
+call "%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to set up Visual Studio environment.
+    exit /b 1
+)
+
+REM Use Visual Studio 18 2026 generator with VS-bundled CMake 4.2+
+REM The VS-bundled CMake can detect this VS instance even at non-standard paths.
+set CMAKE="%VS_PATH%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+
 echo Configuring...
-cmake -B build -S . -G "Visual Studio 17 2022" -A x64
+%CMAKE% -B build -S . -G "Visual Studio 18 2026" -A x64 --fresh
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo CMake configuration failed.
-    echo If you have VS 2019, try: cmake -B build -S . -G "Visual Studio 16 2019" -A x64
     exit /b 1
 )
 
 REM Build
 echo.
 echo Building...
-cmake --build build --config Release
+%CMAKE% --build build --config Release
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo Build failed.

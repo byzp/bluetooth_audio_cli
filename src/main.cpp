@@ -1,28 +1,10 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-#include <atomic>
-#include <windows.h>
-#include <mmsystem.h>
-
-#pragma comment(lib, "winmm.lib")
-
-#include <winrt/Windows.Foundation.h>
+#include <cctype>
 
 #include "app_controller.h"
-
-// Signal flag for Ctrl+C / close handling
-static std::atomic<bool> g_signaled{false};
-
-BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
-    if (ctrlType == CTRL_C_EVENT ||
-        ctrlType == CTRL_BREAK_EVENT ||
-        ctrlType == CTRL_CLOSE_EVENT) {
-        g_signaled = true;
-        return TRUE; // Signal handled
-    }
-    return FALSE;
-}
+#include "platform.h"
 
 static void PrintBanner() {
     std::cout << "\n";
@@ -43,8 +25,9 @@ int main(int argc, char* argv[]) {
             std::cout << "  --help, -h       Show this help\n";
             std::cout << "  --version, -v    Show version\n\n";
             std::cout << "Requirements:\n";
-            std::cout << "  Windows 10 version 2004+ or Windows 11\n";
-            std::cout << "  Bluetooth adapter with A2DP support\n";
+            std::cout << "  A Bluetooth adapter with A2DP support and a paired audio source device.\n";
+            std::cout << "  Windows 10 version 2004+ / Windows 11, or\n";
+            std::cout << "  Linux with BlueZ and PipeWire/PulseAudio configured for A2DP sink.\n";
             return 0;
         }
         if (arg == "--version" || arg == "-v") {
@@ -53,35 +36,11 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Set console to UTF-8 for proper Unicode device name display
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    // Platform setup: console encoding, runtime init, performance tuning.
+    platform::Init();
 
-    // Initialize Windows Runtime (required for AudioPlaybackConnection API)
-    try {
-        winrt::init_apartment();
-    } catch (const std::exception& e) {
-        std::cerr << "Failed to initialize Windows Runtime: " << e.what() << "\n";
-        std::cerr << "This application requires Windows 10 version 2004 (build 19041) or later.\n";
-        return 1;
-    }
-
-    // Register Ctrl+C handler for graceful shutdown
-    if (!SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE)) {
-        std::cerr << "Warning: Could not register Ctrl+C handler.\n";
-    }
-
-    // --- Audio performance optimizations ---
-    // 1ms timer resolution — critical for glitch-free multi-device audio.
-    // Default Windows timer is 15.6ms, causing audio buffer underruns.
-    UINT timerPeriod = 0;
-    TIMECAPS tc{};
-    if (timeGetDevCaps(&tc, sizeof(tc)) == TIMERR_NOERROR) {
-        timerPeriod = tc.wPeriodMin;  // Typically 1ms
-        timeBeginPeriod(timerPeriod);
-    }
-    // Boost process priority to reduce scheduling latency for audio threads.
-    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    // Register interrupt handler for graceful shutdown (Ctrl+C / SIGINT).
+    platform::InstallSignalHandler();
 
     PrintBanner();
 
@@ -91,11 +50,12 @@ int main(int argc, char* argv[]) {
         controller = new AppController();
     } catch (const std::exception& e) {
         std::cerr << "Failed to initialize: " << e.what() << "\n";
+        platform::Shutdown();
         return 1;
     }
 
     // CLI input loop
-    while (controller->IsRunning() && !g_signaled) {
+    while (controller->IsRunning() && !platform::ShouldExit()) {
         std::cout << "> " << std::flush;
 
         std::string line;
@@ -135,18 +95,6 @@ int main(int argc, char* argv[]) {
         } else if (cmd == "status" || cmd == "stat") {
             controller->ShowStatus();
 
-        } else if (cmd == "volume" || cmd == "vol") {
-            int vol = -1;
-            iss >> vol;
-            if (vol >= 0 && vol <= 100) {
-                controller->SetVolume(vol);
-            } else {
-                std::cout << "Usage: volume <0-100>\n";
-            }
-
-        } else if (cmd == "mute") {
-            controller->ToggleMute();
-
         } else if (cmd == "autoconnect") {
             std::string arg;
             iss >> arg;
@@ -174,11 +122,7 @@ int main(int argc, char* argv[]) {
     controller->Shutdown();
     delete controller;
 
-    // Restore timer resolution
-    if (timerPeriod > 0) {
-        timeEndPeriod(timerPeriod);
-    }
-    SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+    platform::Shutdown();
 
     std::cout << "\nGoodbye!\n";
     return 0;

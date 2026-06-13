@@ -5,15 +5,24 @@
 #include <map>
 #include <mutex>
 #include <functional>
+
+#ifdef _WIN32
 #include <thread>
 #include <chrono>
-#include <memory>
-
 #include <winrt/Windows.Media.Audio.h>
 #include <winrt/Windows.Foundation.h>
+#else
+#include <thread>
+#include <atomic>
+#include <systemd/sd-bus.h>
+#endif
 
-/// Manages multiple simultaneous Bluetooth A2DP audio playback connections
-/// via Windows.Media.Audio.AudioPlaybackConnection.
+/// Manages multiple simultaneous Bluetooth A2DP audio playback connections.
+///
+/// Windows: Windows.Media.Audio.AudioPlaybackConnection (the OS audio sink).
+/// Linux:   BlueZ org.bluez.Device1.Connect/Disconnect over D-Bus; the audio
+///          stream itself is carried by the system audio server (PipeWire /
+///          PulseAudio). Connection liveness is tracked via PropertiesChanged.
 class AudioService {
 public:
     enum class State {
@@ -72,8 +81,10 @@ public:
 
 private:
     struct ActiveConnection {
+#ifdef _WIN32
         winrt::Windows::Media::Audio::AudioPlaybackConnection connection{ nullptr };
         winrt::event_token state_token;
+#endif
         State       state           = State::Disconnected;
         bool        final_notified  = false;  // prevents duplicate "[+] streaming"
         std::string device_id;
@@ -85,6 +96,10 @@ private:
     StateCallback           m_on_state_changed;
     mutable std::mutex      m_mutex;
 
+    /// Safely invoke the user callback (copies under lock, invokes outside).
+    void InvokeCallback(const std::string& deviceId, State state, const std::string& detail);
+
+#ifdef _WIN32
     static constexpr int MaxRetries    = 3;
     static constexpr int RetryDelayMs  = 500;
     static constexpr int StateTimeoutMs = 1500;
@@ -92,12 +107,25 @@ private:
     /// Unsubscribe events and remove entry from the map.
     void UnsubscribeAndRemove(const std::string& deviceId);
 
-    /// Safely invoke the user callback (copies under lock, invokes outside).
-    void InvokeCallback(const std::string& deviceId, State state, const std::string& detail);
-
     /// WinRT StateChanged handler for a specific device.
     void OnConnectionStateChanged(
         const std::string& deviceId,
         const winrt::Windows::Media::Audio::AudioPlaybackConnection& sender,
         const winrt::Windows::Foundation::IInspectable& args);
+#else
+    // Two buses, each used by exactly one thread (sd-bus is not safe for
+    // concurrent use): m_call_bus for synchronous Connect/Disconnect on the
+    // CLI thread; m_event_bus for PropertiesChanged on the pump thread.
+    sd_bus*           m_call_bus  = nullptr;
+    sd_bus*           m_event_bus = nullptr;
+    std::thread       m_pump_thread;
+    std::atomic<bool> m_running{ false };
+
+    void StartPump();
+    void StopPump();
+    void PumpLoop();
+    void Disconnect(const std::string& deviceId);  // fire-and-forget Device1.Disconnect
+
+    static int OnPropertiesChanged(sd_bus_message* m, void* userdata, sd_bus_error* ret_error);
+#endif
 };
