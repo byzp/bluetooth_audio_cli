@@ -6,11 +6,10 @@
 
 #include "bluetooth_service.h"
 #include "audio_service.h"
-#include "volume_service.h"
 #include "settings.h"
 
 /// Top-level application controller.
-/// Orchestrates BluetoothService, AudioService, VolumeService, and AppSettings.
+/// Orchestrates BluetoothService, AudioService, and AppSettings.
 /// Supports multiple simultaneous Bluetooth audio connections.
 /// Provides a synchronous CLI command interface.
 class AppController {
@@ -37,14 +36,8 @@ public:
     /// index=0 disconnects all; index>=1 disconnects the nth active connection.
     void DisconnectDevice(int index);
 
-    /// Show status of all active connections, volume, and mute state.
+    /// Show status of all active connections.
     void ShowStatus();
-
-    /// Set system master volume (0-100).
-    void SetVolume(int vol);
-
-    /// Toggle mute on/off.
-    void ToggleMute();
 
     /// Toggle auto-connect on/off.
     void SetAutoConnect(bool enabled);
@@ -61,7 +54,6 @@ public:
 private:
     std::unique_ptr<BluetoothService> m_bluetooth;
     std::unique_ptr<AudioService>     m_audio;
-    std::unique_ptr<VolumeService>    m_volume;
     AppSettings                       m_settings;
     std::atomic<bool>                 m_running{ true };
 

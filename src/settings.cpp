@@ -63,34 +63,6 @@ std::string AppSettings::GetJsonString(const std::string& json, const std::strin
     return value;
 }
 
-int AppSettings::GetJsonInt(const std::string& json, const std::string& key) {
-    std::string search = "\"" + key + "\"";
-    auto pos = json.find(search);
-    if (pos == std::string::npos) return 0;
-
-    pos = json.find(':', pos + search.length());
-    if (pos == std::string::npos) return 0;
-
-    // Skip colon and whitespace
-    ++pos;
-    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\n' || json[pos] == '\r')) {
-        ++pos;
-    }
-
-    std::string num;
-    while (pos < json.length() && (std::isdigit(static_cast<unsigned char>(json[pos])) || json[pos] == '-')) {
-        num += json[pos];
-        ++pos;
-    }
-
-    if (num.empty()) return 0;
-    try {
-        return std::stoi(num);
-    } catch (...) {
-        return 0;
-    }
-}
-
 bool AppSettings::GetJsonBool(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\"";
     auto pos = json.find(search);
@@ -126,8 +98,6 @@ AppSettings AppSettings::Load() {
                             std::istreambuf_iterator<char>());
 
         AppSettings settings;
-        settings.volume = GetJsonInt(content, "volume");
-        if (settings.volume == 0) settings.volume = 100; // default if missing
         settings.auto_connect = GetJsonBool(content, "auto_connect");
         settings.last_device_id = GetJsonString(content, "last_device_id");
         settings.last_device_name = GetJsonString(content, "last_device_name");
@@ -151,7 +121,6 @@ void AppSettings::Save() const {
 
         std::string json;
         json += "{\n";
-        json += "    \"volume\": " + std::to_string(volume) + ",\n";
         json += "    \"auto_connect\": " + std::string(auto_connect ? "true" : "false") + ",\n";
         json += "    \"last_device_id\": \"" + EscapeJson(last_device_id) + "\",\n";
         json += "    \"last_device_name\": \"" + EscapeJson(last_device_name) + "\",\n";

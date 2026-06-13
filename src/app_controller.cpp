@@ -10,10 +10,6 @@ AppController::AppController()
     : m_settings(AppSettings::Load()) {
     m_bluetooth = std::make_unique<BluetoothService>();
     m_audio     = std::make_unique<AudioService>();
-    m_volume    = std::make_unique<VolumeService>();
-
-    // Apply saved volume
-    m_volume->SetVolume(m_settings.volume);
 
     // Wire callbacks
     m_audio->SetOnStateChanged([this](const std::string& deviceId,
@@ -133,8 +129,6 @@ void AppController::DisconnectDevice(int index) {
 
 void AppController::ShowStatus() {
     auto active = m_audio->GetActiveConnections();
-    int volume = m_volume->GetVolume();
-    bool muted = m_volume->IsMuted();
 
     // Active connections
     if (active.empty()) {
@@ -152,26 +146,11 @@ void AppController::ShowStatus() {
         }
     }
 
-    std::cout << "System Volume      : " << volume << "%\n";
-    std::cout << "Muted              : " << (muted ? "Yes" : "No") << "\n";
     std::cout << "Auto-Connect       : " << (m_settings.auto_connect ? "On" : "Off") << "\n";
 
     // Also show available (paired but not connected) device count
     auto devices = m_bluetooth->GetDevices();
     std::cout << "Paired Devices     : " << devices.size() << "\n";
-}
-
-void AppController::SetVolume(int vol) {
-    m_volume->SetVolume(vol);
-    m_settings.volume = m_volume->GetVolume();
-    m_settings.Save();
-    std::cout << "Volume set to " << m_settings.volume << "%.\n";
-}
-
-void AppController::ToggleMute() {
-    bool currently = m_volume->IsMuted();
-    m_volume->SetMute(!currently);
-    std::cout << (m_volume->IsMuted() ? "Muted." : "Unmuted.") << "\n";
 }
 
 void AppController::SetAutoConnect(bool enabled) {
@@ -191,9 +170,7 @@ void AppController::ShowHelp() const {
     std::cout << "  connect <n> | conn <n> Connect to device by index (supports multiple)\n";
     std::cout << "  disconnect | disc      Disconnect all active connections\n";
     std::cout << "  disconnect <n> | disc <n>  Disconnect specific active connection\n";
-    std::cout << "  status | stat           Show all connections, volume, and device info\n";
-    std::cout << "  volume <0-100> | vol   Set system master volume\n";
-    std::cout << "  mute                    Toggle mute on/off\n";
+    std::cout << "  status | stat           Show all connections and device info\n";
     std::cout << "  autoconnect on|off      Enable/disable auto-connect on start\n";
     std::cout << "  help | ?                Show this help\n";
     std::cout << "  quit | exit | q         Exit application\n";
@@ -308,6 +285,5 @@ void AppController::Shutdown() {
 
     m_audio->CloseAllConnections();
     m_bluetooth->StopWatching();
-    m_settings.volume = m_volume->GetVolume();
     m_settings.Save();
 }
